@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>微信俄罗斯方块</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f0f0f0;
+            touch-action: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #game-container {
+            position: relative;
+            margin-top: 20px;
+        }
+        #game-canvas {
+            background: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        #score-panel {
+            margin-top: 10px;
+            font-size: 20px;
+            color: #333;
+        }
+        .controls {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .control-btn {
+            padding: 12px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            touch-action: manipulation;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="score-panel">得分: 0</div>
+    </div>
+    <div class="controls">
+        <button class="control-btn" id="left">←</button>
+        <button class="control-btn" id="rotate">旋转</button>
+        <button class="control-btn" id="right">→</button>
+    </div>
+
+<script>
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+const scorePanel = document.getElementById('score-panel');
+
+// 游戏区域尺寸
+const BLOCK_SIZE = 30;
+const COLS = 10;
+const ROWS = 20;
+canvas.width = COLS * BLOCK_SIZE;
+canvas.height = ROWS * BLOCK_SIZE;
+
+// 七种方块形状
+const SHAPES = [
+    [[1,1,1,1]], // I
+    [[1,1,1],[0,1,0]], // T
+    [[1,1,1],[1,0,0]], // L
+    [[1,1,1],[0,0,1]], // J
+    [[1,1],[1,1]], // O
+    [[1,1,0],[0,1,1]], // S
+    [[0,1,1],[1,1,0]]  // Z
+];
+
+let score = 0;
+let currentPiece = null;
+let currentPos = {x: 0, y: 0};
+let gameBoard = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+
+// 初始化游戏
+function initGame() {
+    spawnPiece();
+    gameLoop();
+}
+
+// 生成新方块
+function spawnPiece() {
+    const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+    currentPiece = shape;
+    currentPos = {
+        x: Math.floor(COLS/2) - Math.floor(shape[0].length/2),
+        y: 0
+    };
+}
+
+// 碰撞检测
+function collision() {
+    for (let y = 0; y < currentPiece.length; y++) {
+        for (let x = 0; x < currentPiece[y].length; x++) {
+            if (currentPiece[y][x]) {
+                const newX = currentPos.x + x;
+                const newY = currentPos.y + y;
+                if (newX < 0 || newX >= COLS || newY >= ROWS) return true;
+                if (newY >= 0 && gameBoard[newY][newX]) return true;
+            }
+        }
+    }
+    return false;
+}
+
+// 合并到游戏区域
+function mergePiece() {
+    for (let y = 0; y < currentPiece.length; y++) {
+        for (let x = 0; x < currentPiece[y].length; x++) {
+            if (currentPiece[y][x]) {
+                gameBoard[currentPos.y + y][currentPos.x + x] = 1;
+            }
+        }
+    }
+    checkLines();
+    spawnPiece();
+}
+
+// 消除完整行
+function checkLines() {
+    for (let y = ROWS - 1; y >= 0; y--) {
+        if (gameBoard[y].every(cell => cell)) {
+            gameBoard.splice(y, 1);
+            gameBoard.unshift(Array(COLS).fill(0));
+            score += 100;
+            scorePanel.textContent = `得分: ${score}`;
+        }
+    }
+}
+
+// 游戏循环
+function gameLoop() {
+    currentPos.y++;
+    if (collision()) {
+        currentPos.y--;
+        mergePiece();
+        if (collision()) {
+            alert(`游戏结束！得分: ${score}`);
+            location.reload();
+        }
+    }
+    draw();
+    setTimeout(gameLoop, 1000 - Math.min(score, 900));
+}
+
+// 绘制游戏
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 绘制游戏区域
+    gameBoard.forEach((row, y) => {
+        row.forEach((cell, x) => {
+            if (cell) {
+                ctx.fillStyle = '#4CAF50';
+                ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, 
+                           BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+            }
+        });
+    });
+
+    // 绘制当前方块
+    ctx.fillStyle = '#2196F3';
+    currentPiece.forEach((row, y) => {
+        row.forEach((cell, x) => {
+            if (cell) {
+                ctx.fillRect(
+                    (currentPos.x + x) * BLOCK_SIZE,
+                    (currentPos.y + y) * BLOCK_SIZE,
+                    BLOCK_SIZE - 1,
+                    BLOCK_SIZE - 1
+                );
+            }
+        });
+    });
+}
+
+// 控制逻辑
+document.getElementById('left').addEventListener('touchstart', () => {
+    currentPos.x--;
+    if (collision()) currentPos.x++;
+    draw();
+});
+
+document.getElementById('right').addEventListener('touchstart', () => {
+    currentPos.x++;
+    if (collision()) currentPos.x--;
+    draw();
+});
+
+document.getElementById('rotate').addEventListener('touchstart', () => {
+    const rotated = currentPiece[0].map((_, i) =>
+        currentPiece.map(row => row[i]).reverse()
+    );
+    const original = currentPiece;
+    currentPiece = rotated;
+    if (collision()) currentPiece = original;
+    draw();
+});
+
+// 触屏手势控制
+let touchStartX = 0;
+let touchStartY = 0;
+
+canvas.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    e.preventDefault();
+});
+
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+});
+
+canvas.addEventListener('touchend', e => {
+    const deltaX = e.changedTouches[0].clientX - touchStartX;
+    const deltaY = e.changedTouches[0].clientY - touchStartY;
+    
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (deltaX > 0) {
+            currentPos.x++;
+            if (collision()) currentPos.x--;
+        } else {
+            currentPos.x--;
+            if (collision()) currentPos.x++;
+        }
+    } else {
+        if (deltaY < 0) {
+            const rotated = currentPiece[0].map((_, i) =>
+                currentPiece.map(row => row[i]).reverse()
+            );
+            const original = currentPiece;
+            currentPiece = rotated;
+            if (collision()) currentPiece = original;
+        }
+    }
+    draw();
+    e.preventDefault();
+});
+
+// 开始游戏
+initGame();
+</script>
+</body>
+</html>
